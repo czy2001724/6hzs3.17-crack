@@ -1,30 +1,34 @@
 """
-6hzs3.17 璁稿彲璇佺粫杩囪ˉ涓佹ā鍧?============================
-鏇挎崲鎵€鏈夊畨鍏ㄩ獙璇佸嚱鏁颁负绌哄３瀹炵幇銆?鍏辫缁曡繃 28 涓畨鍏ㄥ嚱鏁?+ SSO 璁よ瘉妯″潡銆?"""
+6hzs3.17 许可证绕过补丁模块
+============================
+替换所有安全验证函数为空壳实现。
+共计绕过 28 个安全函数 + SSO 认证模块。
+"""
 
 import subprocess
 import os as os_module
 
 
 def patch_all():
-    """鎵ц鍏ㄩ儴缁曡繃琛ヤ竵"""
+    """执行全部绕过补丁"""
     
     import sso_auth
     import security
     import activation
 
-    # === Security 妯″潡琛ヤ竵 ===
+    # === Security 模块补丁 ===
 
-    # 鏃堕棿楠岃瘉
+    # 时间验证
     security.verify_time = lambda: (True, 'OK')
     security.init_time_check = lambda: None
     security._get_network_time = lambda: 0.0
 
-    # 瀹屾暣鎬ч獙璇?    security.verify_integrity = lambda: True
+    # 完整性验证
+    security.verify_integrity = lambda: True
     security.verify_hb_integrity = lambda: True
     security.init_integrity_check = lambda: 'ok'
 
-    # 蹇冭烦绯荤粺
+    # 心跳系统
     security.is_heartbeat_valid = lambda: True
     security._heartbeat_ever_succeeded = True
     security._last_heartbeat_success = True
@@ -34,12 +38,13 @@ def patch_all():
     security._heartbeat_worker = lambda: None
     security._pinned_post_for_heartbeat = lambda: None
 
-    # 瀹夊叏妫€鏌ュ叆鍙?    security.perform_security_check = lambda: (True, 'OK')
+    # 安全检查入口
+    security.perform_security_check = lambda: (True, 'OK')
     security.perform_full_security_check = lambda: (True, 'OK')
     security.security_check_with_warning = lambda: True
     security.init_security = lambda: None
 
-    # 鍙嶈皟璇?鍙峍M
+    # 反调试/反VM
     security._check_vm_environment = lambda: False
     security._is_debugger_present = lambda: False
     security._check_suspicious_processes = lambda: False
@@ -48,14 +53,14 @@ def patch_all():
     security._check_ce_window = lambda: False
     security._check_dll_exports = lambda: False
 
-    # EXE鍝堝笇
+    # EXE哈希
     security._calculate_exe_hash = lambda: '0' * 40
 
-    # === Activation 妯″潡琛ヤ竵 ===
+    # === Activation 模块补丁 ===
     activation._verify_local_hmac = lambda: True
     activation.verify_activation = lambda: True
 
-    # === SSO 璁よ瘉琛ヤ竵 ===
+    # === SSO 认证补丁 ===
     sso_auth.SSOAuth = type('SSOAuth', (), {
         '__init__': lambda self, *a, **kw: None,
         'is_authenticated': lambda self: True,
@@ -64,8 +69,9 @@ def patch_all():
         'logout': lambda self: None,
     })
 
-    # === 绯荤粺璋冪敤淇濇姢琛ヤ竵 ===
-    # 闃叉 BCC 鍔犲瘑瀛楄妭鐮佸唴閮ㄧ洿鎺ヨ皟鐢ㄧ郴缁熷懡浠ゅけ璐?    _orig_check_output = subprocess.check_output
+    # === 系统调用保护补丁 ===
+    # 防止 BCC 加密字节码内部直接调用系统命令失败
+    _orig_check_output = subprocess.check_output
     _orig_system = os_module.system
 
     subprocess.check_output = lambda *a, **kw: (
@@ -73,7 +79,7 @@ def patch_all():
     )
     os_module.system = lambda *a, **kw: 0
 
-    # WMI 鏌ヨ淇濇姢
+    # WMI 查询保护
     try:
         import _wmi
         _wmi.exec_query = lambda *a, **kw: []
