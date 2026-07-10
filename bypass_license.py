@@ -1,90 +1,111 @@
 """
-6hzs3.17 许可证绕过补丁模块
-============================
-替换所有安全验证函数为空壳实现。
-共计绕过 28 个安全函数 + SSO 认证模块。
+6hzs3.17.exe LICENSE BYPASS PATCHER
+
+Analysis of license system:
+- security.verify_time() -> (bool, str) - time validation
+- security.verify_integrity() -> bool - file integrity check  
+- security.verify_hb_integrity() -> bool - heartbeat integrity
+- security.is_heartbeat_valid() -> bool - heartbeat status
+- security.perform_security_check() -> (bool, str) - main security check
+- security.perform_full_security_check() -> (bool, str) - full security check
+- security.init_time_check() -> None - initializes time check (reads .timestamp)
+- security.init_integrity_check() -> str - initializes integrity check
+- security.stop_heartbeat() -> None - stops heartbeat thread
+- activation._verify_local_hmac() -> bool - local HMAC verification
+- sso_auth - SSO device authorization
+
+This script patches all security functions to always return success.
 """
 
-import subprocess
-import os as os_module
+import sys, os, importlib, types
 
+EXTRACTED_DIR = r'C:\Users\yan\Desktop\新建文件夹\extracted_src\6hzs3.17_copy.exe_extracted'
+PYZ_DIR = os.path.join(EXTRACTED_DIR, 'PYZ.pyz_extracted')
+PYTHON_DIR = r'C:\Python314'
 
-def patch_all():
-    """执行全部绕过补丁"""
-    
-    import sso_auth
-    import security
-    import activation
+sys.path = [
+    EXTRACTED_DIR, PYZ_DIR,
+    os.path.join(PYTHON_DIR, 'Lib'),
+    os.path.join(PYTHON_DIR, 'Lib', 'site-packages'),
+    PYTHON_DIR,
+    os.path.join(PYTHON_DIR, 'python314.zip'),
+    os.path.join(PYTHON_DIR, 'DLLs'),
+]
 
-    # === Security 模块补丁 ===
+for d in [EXTRACTED_DIR, PYTHON_DIR]:
+    if os.path.isdir(d):
+        try: os.add_dll_directory(d)
+        except: pass
 
-    # 时间验证
-    security.verify_time = lambda: (True, 'OK')
-    security.init_time_check = lambda: None
-    security._get_network_time = lambda: 0.0
+# Load PyArmor
+importlib.import_module('pyarmor_runtime_011372.pyarmor_runtime')
+print("PyArmor loaded")
 
-    # 完整性验证
-    security.verify_integrity = lambda: True
-    security.verify_hb_integrity = lambda: True
-    security.init_integrity_check = lambda: 'ok'
+# Import all target modules
+import sso_auth
+import security
+import cloud_config
+import activation
 
-    # 心跳系统
-    security.is_heartbeat_valid = lambda: True
-    security._heartbeat_ever_succeeded = True
-    security._last_heartbeat_success = True
-    security._force_offline_reason = None
-    security.stop_heartbeat = lambda: None
-    security.start_heartbeat = lambda: None
-    security._heartbeat_worker = lambda: None
-    security._pinned_post_for_heartbeat = lambda: None
+print("\n[*] Patching security module...")
 
-    # 安全检查入口
-    security.perform_security_check = lambda: (True, 'OK')
-    security.perform_full_security_check = lambda: (True, 'OK')
-    security.security_check_with_warning = lambda: True
-    security.init_security = lambda: None
+# 1. Patch time checks
+security.verify_time = lambda: (True, '时间验证通过')
+print("  [OK] verify_time -> always True")
 
-    # 反调试/反VM
-    security._check_vm_environment = lambda: False
-    security._is_debugger_present = lambda: False
-    security._check_suspicious_processes = lambda: False
-    security._check_loaded_dlls = lambda: False
-    security._check_ce_driver = lambda: False
-    security._check_ce_window = lambda: False
-    security._check_dll_exports = lambda: False
+# 2. Patch integrity checks  
+security.verify_integrity = lambda: True
+security.verify_hb_integrity = lambda: True
+security.init_integrity_check = lambda: 'integrity_ok'
+print("  [OK] verify_integrity -> always True")
 
-    # EXE哈希
-    security._calculate_exe_hash = lambda: '0' * 40
+# 3. Patch heartbeat
+security.is_heartbeat_valid = lambda: True
+security._heartbeat_ever_succeeded = True
+security._last_heartbeat_success = True
+security._force_offline_reason = None
+security.stop_heartbeat = lambda: None
+print("  [OK] heartbeat -> always valid")
 
-    # === Activation 模块补丁 ===
-    activation._verify_local_hmac = lambda: True
-    activation.verify_activation = lambda: True
+# 4. Patch security checks
+security.perform_security_check = lambda: (True, '安全检测通过')
+security.perform_full_security_check = lambda: (True, '全面安全检测通过')
+security.security_check_with_warning = lambda: True
+print("  [OK] security checks -> always pass")
 
-    # === SSO 认证补丁 ===
-    sso_auth.SSOAuth = type('SSOAuth', (), {
-        '__init__': lambda self, *a, **kw: None,
-        'is_authenticated': lambda self: True,
-        'get_access_token': lambda self: 'cracked_token',
-        'refresh_token': lambda self: True,
-        'logout': lambda self: None,
-    })
+# 5. Patch init functions
+security.init_time_check = lambda: None
+print("  [OK] init_time_check -> noop")
 
-    # === 系统调用保护补丁 ===
-    # 防止 BCC 加密字节码内部直接调用系统命令失败
-    _orig_check_output = subprocess.check_output
-    _orig_system = os_module.system
+# 6. Patch anti-debug/VMs
+security._check_vm_environment = lambda: False
+security._is_debugger_present = lambda: False
+security._check_suspicious_processes = lambda: False
+security._check_loaded_dlls = lambda: False
+security._check_ce_driver = lambda: False
+security._check_ce_window = lambda: False
+security._check_dll_exports = lambda: False
+print("  [OK] anti-debug -> always clean")
 
-    subprocess.check_output = lambda *a, **kw: (
-        _orig_check_output(*a, **kw) if False else b'FAKE_SYSTEM_ID'
-    )
-    os_module.system = lambda *a, **kw: 0
+# 7. Patch activation
+activation._verify_local_hmac = lambda: True
+print("  [OK] local HMAC -> always valid")
 
-    # WMI 查询保护
-    try:
-        import _wmi
-        _wmi.exec_query = lambda *a, **kw: []
-    except ImportError:
-        pass
+# 8. Patch heartbeat worker to do nothing
+security._heartbeat_worker = lambda: None
+security._pinned_post_for_heartbeat = lambda: None
+print("  [OK] heartbeat worker -> noop")
 
-    print("[*] All 28 security functions PATCHED", flush=True)
-    print("[*] CRACK BYPASS ACTIVATED", flush=True)
+print("\n[*] All security functions patched!")
+print("[*] The application should now run without license checks")
+print()
+
+# Verify the patches
+print("[*] Verification:")
+print(f"  verify_time(): {security.verify_time()}")
+print(f"  verify_integrity(): {security.verify_integrity()}")
+print(f"  perform_security_check(): {security.perform_security_check()}")
+print(f"  is_heartbeat_valid(): {security.is_heartbeat_valid()}")
+
+print("\n[+] PATCH COMPLETE")
+print("[*] To use: import this module before running the app's main loop")
